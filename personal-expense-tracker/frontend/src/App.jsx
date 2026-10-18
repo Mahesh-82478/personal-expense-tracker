@@ -1,210 +1,107 @@
+
 import React, { useState, useEffect } from 'react';
 import './App.css';
 
-// Base REST API URL pointing to the Spring Boot backend
-const API_BASE_URL = 'http://localhost:8080/api/expenses';
+// Live Spring Boot backend deployed on Render
+const API_BASE_URL =
+  'https://personal-expense-tracker-ne3j.onrender.com/api/expenses';
 
-// Allowed Categories defined by application requirements
 const CATEGORIES = ['Food', 'Travel', 'Shopping', 'Other'];
 
 function App() {
-  // State for all expenses fetched from the backend
   const [expenses, setExpenses] = useState([]);
 
-  // Form input state
   const [formData, setFormData] = useState({
     title: '',
     amount: '',
     category: '',
-    date: new Date().toISOString().split('T')[0], // Default to today's date (YYYY-MM-DD)
+    date: new Date().toISOString().split('T')[0],
   });
 
-  // State to track if we are in "Edit" mode (holds ID of item being edited, or null)
   const [editingId, setEditingId] = useState(null);
-
-  // Category filter state ('All' or specific category)
   const [selectedCategory, setSelectedCategory] = useState('All');
-
-  // Loading and Notification feedback states
   const [loading, setLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
 
-  // Auto-dismiss messages after 5 seconds
   useEffect(() => {
-    if (successMessage) {
-      const timer = setTimeout(() => setSuccessMessage(''), 5000);
-      return () => clearTimeout(timer);
-    }
+    if (!successMessage) return;
+
+    const timer = setTimeout(() => setSuccessMessage(''), 5000);
+    return () => clearTimeout(timer);
   }, [successMessage]);
 
   useEffect(() => {
-    if (errorMessage) {
-      const timer = setTimeout(() => setErrorMessage(''), 7000);
-      return () => clearTimeout(timer);
-    }
+    if (!errorMessage) return;
+
+    const timer = setTimeout(() => setErrorMessage(''), 7000);
+    return () => clearTimeout(timer);
   }, [errorMessage]);
 
-  // Load all expenses on initial component mount
   useEffect(() => {
     fetchExpenses();
   }, []);
 
-  /**
-   * Fetch all expenses from Spring Boot backend using Fetch API
-   */
+  // Get all expenses from the deployed backend
   const fetchExpenses = async () => {
     setLoading(true);
     setErrorMessage('');
+
     try {
       const response = await fetch(API_BASE_URL);
+
       if (!response.ok) {
-        throw new Error(`Server returned status ${response.status}: ${response.statusText}`);
+        throw new Error(`Server returned HTTP ${response.status}`);
       }
+
       const data = await response.json();
       setExpenses(data);
     } catch (error) {
       console.error('Fetch error:', error);
       setErrorMessage(
-        'Unable to connect to the backend server at ' +
-          API_BASE_URL +
-          '. Please ensure your Spring Boot application is running on port 8080.'
+        'Unable to connect to the backend. Please try again later.'
       );
     } finally {
       setLoading(false);
     }
   };
 
-  /**
-   * Handle text, number, and select input changes
-   */
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
+  const handleInputChange = (event) => {
+    const { name, value } = event.target;
+
+    setFormData((previous) => ({
+      ...previous,
       [name]: value,
     }));
   };
 
-  /**
-   * Validate form inputs on client side before sending request to backend
-   */
   const validateForm = () => {
-    if (!formData.title || formData.title.trim() === '') {
-      setErrorMessage('Validation error: Title must not be empty.');
+    if (!formData.title.trim()) {
+      setErrorMessage('Title must not be empty.');
       return false;
     }
-    const parsedAmount = parseFloat(formData.amount);
-    if (!formData.amount || isNaN(parsedAmount) || parsedAmount <= 0) {
-      setErrorMessage('Validation error: Amount must be a valid number greater than zero.');
+
+    const amount = Number(formData.amount);
+
+    if (!formData.amount || !Number.isFinite(amount) || amount <= 0) {
+      setErrorMessage('Amount must be greater than zero.');
       return false;
     }
-    if (!formData.category || formData.category.trim() === '') {
-      setErrorMessage('Validation error: Please select an expense category.');
+
+    if (!CATEGORIES.includes(formData.category)) {
+      setErrorMessage('Please select a valid category.');
       return false;
     }
+
     if (!formData.date) {
-      setErrorMessage('Validation error: Please enter a valid date.');
+      setErrorMessage('Please select a date.');
       return false;
     }
+
     return true;
   };
 
-  /**
-   * Handle form submission for both Add and Update operations
-   */
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    if (!validateForm()) {
-      return;
-    }
-
-    setErrorMessage('');
-    setSuccessMessage('');
-
-    const payload = {
-      title: formData.title.trim(),
-      amount: parseFloat(formData.amount),
-      category: formData.category,
-      date: formData.date,
-    };
-
-    try {
-      if (editingId) {
-        // PUT /api/expenses/{id} - Update existing expense
-        const response = await fetch(`${API_BASE_URL}/${editingId}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(payload),
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => null);
-          const errorMsg = errorData?.message || `Failed to update expense (HTTP ${response.status})`;
-          throw new Error(errorMsg);
-        }
-
-        setSuccessMessage(`Expense "${payload.title}" updated successfully!`);
-        setEditingId(null);
-      } else {
-        // POST /api/expenses - Add new expense
-        const response = await fetch(API_BASE_URL, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(payload),
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => null);
-          const errorMsg = errorData?.message || `Failed to add expense (HTTP ${response.status})`;
-          throw new Error(errorMsg);
-        }
-
-        setSuccessMessage(`Expense "${payload.title}" added successfully!`);
-      }
-
-      // Reset form fields
-      setFormData({
-        title: '',
-        amount: '',
-        category: '',
-        date: new Date().toISOString().split('T')[0],
-      });
-
-      // Refresh data from the backend to ensure data consistency
-      await fetchExpenses();
-    } catch (error) {
-      console.error('Submit error:', error);
-      setErrorMessage(error.message || 'Operation failed. Please check the backend connection.');
-    }
-  };
-
-  /**
-   * Populate form with existing expense values for editing
-   */
-  const handleEdit = (expense) => {
-    setEditingId(expense.id);
-    setFormData({
-      title: expense.title,
-      amount: expense.amount.toString(),
-      category: expense.category,
-      date: expense.date,
-    });
-    setSuccessMessage('');
-    setErrorMessage('');
-    // Scroll smoothly to form
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  /**
-   * Cancel edit mode and reset form fields
-   */
-  const handleCancelEdit = () => {
+  const resetForm = () => {
     setEditingId(null);
     setFormData({
       title: '',
@@ -212,20 +109,92 @@ function App() {
       category: '',
       date: new Date().toISOString().split('T')[0],
     });
-    setErrorMessage('');
   };
 
-  /**
-   * Delete an expense after asking user for explicit confirmation
-   */
+  // Add a new expense or update an existing expense
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+
+    if (!validateForm()) return;
+
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    const payload = {
+      title: formData.title.trim(),
+      amount: Number(formData.amount),
+      category: formData.category,
+      date: formData.date,
+    };
+
+    try {
+      const isEditing = editingId !== null;
+      const url = isEditing
+        ? `${API_BASE_URL}/${editingId}`
+        : API_BASE_URL;
+
+      const response = await fetch(url, {
+        method: isEditing ? 'PUT' : 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(
+          errorData?.message ||
+            `Unable to save expense (HTTP ${response.status})`
+        );
+      }
+
+      setSuccessMessage(
+        isEditing
+          ? `Expense "${payload.title}" updated successfully!`
+          : `Expense "${payload.title}" added successfully!`
+      );
+
+      resetForm();
+      await fetchExpenses();
+    } catch (error) {
+      console.error('Save error:', error);
+      setErrorMessage(
+        error.message || 'Unable to save the expense.'
+      );
+    }
+  };
+
+  // Load an expense into the form for editing
+  const handleEdit = (expense) => {
+    setEditingId(expense.id);
+
+    setFormData({
+      title: expense.title,
+      amount: String(expense.amount),
+      category: expense.category,
+      date: expense.date,
+    });
+
+    setSuccessMessage('');
+    setErrorMessage('');
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleCancelEdit = () => {
+    resetForm();
+    setErrorMessage('');
+    setSuccessMessage('');
+  };
+
+  // Delete an expense after confirmation
   const handleDelete = async (id, title) => {
-    const isConfirmed = window.confirm(
-      `Are you sure you want to delete the expense "${title}" (ID: ${id})?`
+    const confirmed = window.confirm(
+      `Are you sure you want to delete "${title}"?`
     );
 
-    if (!isConfirmed) {
-      return;
-    }
+    if (!confirmed) return;
 
     try {
       const response = await fetch(`${API_BASE_URL}/${id}`, {
@@ -234,55 +203,51 @@ function App() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => null);
-        const errorMsg = errorData?.message || `Failed to delete expense (HTTP ${response.status})`;
-        throw new Error(errorMsg);
+
+        throw new Error(
+          errorData?.message ||
+            `Unable to delete expense (HTTP ${response.status})`
+        );
       }
 
       setSuccessMessage(`Expense "${title}" deleted successfully!`);
 
-      // If user was editing this item, cancel editing mode
       if (editingId === id) {
-        handleCancelEdit();
+        resetForm();
       }
 
-      // Refresh list from backend
       await fetchExpenses();
     } catch (error) {
       console.error('Delete error:', error);
-      setErrorMessage(error.message || 'Failed to delete expense.');
+      setErrorMessage(error.message || 'Unable to delete expense.');
     }
   };
 
-  // Calculate total across ALL saved expenses (as specified by Requirement #5)
-  const totalAmount = expenses.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
+  const totalAmount = expenses.reduce(
+    (sum, expense) => sum + (Number(expense.amount) || 0),
+    0
+  );
 
-  // Filter expenses according to the selected category filter
   const filteredExpenses =
     selectedCategory === 'All'
       ? expenses
       : expenses.filter(
-          (expense) => expense.category.toLowerCase() === selectedCategory.toLowerCase()
+          (expense) =>
+            expense.category.toLowerCase() ===
+            selectedCategory.toLowerCase()
         );
 
-  // Calculate filtered total for extra clarity
   const filteredTotal = filteredExpenses.reduce(
-    (sum, item) => sum + (parseFloat(item.amount) || 0),
+    (sum, expense) => sum + (Number(expense.amount) || 0),
     0
   );
 
-  /**
-   * Helper to format currency nicely
-   */
-  const formatCurrency = (val) => {
-    return `₹${parseFloat(val || 0).toLocaleString('en-IN', {
+  const formatCurrency = (value) =>
+    `₹${Number(value || 0).toLocaleString('en-IN', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })}`;
-  };
 
-  /**
-   * Helper to return CSS class for category badge
-   */
   const getCategoryBadgeClass = (category) => {
     switch (category?.toLowerCase()) {
       case 'food':
@@ -298,73 +263,83 @@ function App() {
 
   return (
     <div className="app-container">
-      {/* 1. Header */}
       <header className="app-header">
         <h1>Personal Expense Tracker</h1>
       </header>
 
-      {/* Notification Banners */}
       {loading && (
         <div className="alert alert-loading">
-          <span>Loading expenses from backend...</span>
+          Loading expenses from backend...
         </div>
       )}
 
       {successMessage && (
         <div className="alert alert-success">
-          <span>&check; {successMessage}</span>
-          <button className="alert-close" onClick={() => setSuccessMessage('')}>
-            &times;
+          <span>✓ {successMessage}</span>
+          <button
+            className="alert-close"
+            onClick={() => setSuccessMessage('')}
+            aria-label="Close success message"
+          >
+            ×
           </button>
         </div>
       )}
 
       {errorMessage && (
         <div className="alert alert-error">
-          <span>&#9888; {errorMessage}</span>
-          <button className="alert-close" onClick={() => setErrorMessage('')}>
-            &times;
+          <span>⚠ {errorMessage}</span>
+          <button
+            className="alert-close"
+            onClick={() => setErrorMessage('')}
+            aria-label="Close error message"
+          >
+            ×
           </button>
         </div>
       )}
 
-      {/* 2. Summary Cards */}
       <div className="summary-grid">
         <div className="summary-card highlight">
           <span className="summary-title">Total Expenses</span>
-          <span className="summary-value">{formatCurrency(totalAmount)}</span>
-          <span className="summary-subtext">Across all {expenses.length} saved records</span>
+          <span className="summary-value">
+            {formatCurrency(totalAmount)}
+          </span>
+          <span className="summary-subtext">
+            Across all {expenses.length} saved records
+          </span>
         </div>
 
         <div className="summary-card secondary">
           <span className="summary-title">Total Entries</span>
           <span className="summary-value">{expenses.length}</span>
-          <span className="summary-subtext">Persistent in H2 Database</span>
+          <span className="summary-subtext">
+            Expenses returned by the backend
+          </span>
         </div>
 
         {selectedCategory !== 'All' && (
           <div className="summary-card filter-card">
-            <span className="summary-title">{selectedCategory} Total</span>
-            <span className="summary-value">{formatCurrency(filteredTotal)}</span>
-            <span className="summary-subtext">{filteredExpenses.length} records matching filter</span>
+            <span className="summary-title">
+              {selectedCategory} Total
+            </span>
+            <span className="summary-value">
+              {formatCurrency(filteredTotal)}
+            </span>
+            <span className="summary-subtext">
+              {filteredExpenses.length} matching records
+            </span>
           </div>
         )}
       </div>
 
-      {/* 3. Add / Edit Expense Form */}
       <section className="section-card">
         <h2 className="section-title">
-          <span>{editingId ? 'Edit Expense' : 'Add New Expense'}</span>
-          {editingId && (
-            <span style={{ fontSize: '0.85rem', color: '#f59e0b', fontWeight: '500' }}>
-              Editing Record ID #{editingId}
-            </span>
-          )}
+          {editingId !== null ? 'Edit Expense' : 'Add New Expense'}
         </h2>
 
         <form onSubmit={handleSubmit} className="expense-form">
           <div className="form-grid">
-            {/* Title Input */}
             <div className="form-group">
               <label htmlFor="title">Title *</label>
               <input
@@ -378,7 +353,6 @@ function App() {
               />
             </div>
 
-            {/* Amount Input */}
             <div className="form-group">
               <label htmlFor="amount">Amount (₹) *</label>
               <input
@@ -394,7 +368,6 @@ function App() {
               />
             </div>
 
-            {/* Category Dropdown */}
             <div className="form-group">
               <label htmlFor="category">Category *</label>
               <select
@@ -405,15 +378,14 @@ function App() {
                 required
               >
                 <option value="">-- Select Category --</option>
-                {CATEGORIES.map((cat) => (
-                  <option key={cat} value={cat}>
-                    {cat}
+                {CATEGORIES.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
                   </option>
                 ))}
               </select>
             </div>
 
-            {/* Date Input */}
             <div className="form-group">
               <label htmlFor="date">Date *</label>
               <input
@@ -427,15 +399,17 @@ function App() {
             </div>
           </div>
 
-          {/* Form Actions */}
           <div className="form-actions">
             <button
               type="submit"
-              className={`btn ${editingId ? 'btn-warning' : 'btn-primary'}`}
+              className={`btn ${
+                editingId !== null ? 'btn-warning' : 'btn-primary'
+              }`}
             >
-              {editingId ? 'Update Expense' : 'Add Expense'}
+              {editingId !== null ? 'Update Expense' : 'Add Expense'}
             </button>
-            {editingId && (
+
+            {editingId !== null && (
               <button
                 type="button"
                 className="btn btn-secondary"
@@ -448,7 +422,6 @@ function App() {
         </form>
       </section>
 
-      {/* 4. Filter & Expenses Table */}
       <section className="section-card">
         <div className="filter-bar">
           <h2 className="section-title" style={{ margin: 0 }}>
@@ -456,24 +429,27 @@ function App() {
           </h2>
 
           <div className="filter-group">
-            <label htmlFor="filter-category">Filter by Category:</label>
+            <label htmlFor="filter-category">
+              Filter by Category:
+            </label>
             <select
               id="filter-category"
               className="filter-select"
               value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
+              onChange={(event) =>
+                setSelectedCategory(event.target.value)
+              }
             >
               <option value="All">All Categories</option>
-              {CATEGORIES.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
+              {CATEGORIES.map((category) => (
+                <option key={category} value={category}>
+                  {category}
                 </option>
               ))}
             </select>
           </div>
         </div>
 
-        {/* 5. Clean Expenses Table */}
         {filteredExpenses.length > 0 ? (
           <div className="table-responsive">
             <table className="expense-table">
@@ -487,6 +463,7 @@ function App() {
                   <th style={{ textAlign: 'center' }}>Actions</th>
                 </tr>
               </thead>
+
               <tbody>
                 {filteredExpenses.map((expense) => (
                   <tr key={expense.id}>
@@ -494,15 +471,24 @@ function App() {
                       <strong>#{expense.id}</strong>
                     </td>
                     <td>{expense.title}</td>
-                    <td className="expense-amount">{formatCurrency(expense.amount)}</td>
+                    <td className="expense-amount">
+                      {formatCurrency(expense.amount)}
+                    </td>
                     <td>
-                      <span className={`category-badge ${getCategoryBadgeClass(expense.category)}`}>
+                      <span
+                        className={`category-badge ${getCategoryBadgeClass(
+                          expense.category
+                        )}`}
+                      >
                         {expense.category}
                       </span>
                     </td>
                     <td>{expense.date}</td>
                     <td style={{ textAlign: 'center' }}>
-                      <div className="table-actions" style={{ justifyContent: 'center' }}>
+                      <div
+                        className="table-actions"
+                        style={{ justifyContent: 'center' }}
+                      >
                         <button
                           className="btn btn-sm btn-edit"
                           onClick={() => handleEdit(expense)}
@@ -512,7 +498,9 @@ function App() {
                         </button>
                         <button
                           className="btn btn-sm btn-delete"
-                          onClick={() => handleDelete(expense.id, expense.title)}
+                          onClick={() =>
+                            handleDelete(expense.id, expense.title)
+                          }
                           title="Delete this expense"
                         >
                           Delete
@@ -525,9 +513,8 @@ function App() {
             </table>
           </div>
         ) : (
-          /* Empty State */
           <div className="empty-state">
-            <div className="empty-state-icon">&#128176;</div>
+            <div className="empty-state-icon">💰</div>
             <p>
               {expenses.length === 0
                 ? 'No expenses recorded yet.'
@@ -536,7 +523,7 @@ function App() {
             <small>
               {expenses.length === 0
                 ? 'Use the form above to record your first expense.'
-                : 'Select "All Categories" or another category to view expenses.'}
+                : 'Select All Categories or another category to view expenses.'}
             </small>
           </div>
         )}
